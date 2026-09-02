@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+langchain
+langchain-google-genai
+llama-index
+llama-index-vector-stores-chroma
+chromadb
+psycopg2-binary
+sqlalchemy
+python-dotenv
+pydantic

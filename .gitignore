@@ -1,0 +1,86 @@
+# =========================
+# Python / Backend
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+venv/
+.venv/
+env/
+ENV/
+
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Databases / local runtime data
+*.sqlite3
+*.db
+*.db-journal
+
+# Jupyter
+.ipynb_checkpoints/
+
+# =========================
+# Node / Frontend
+# =========================
+node_modules/
+frontend/node_modules/
+
+dist/
+frontend/dist/
+.vite/
+coverage/
+.npm/
+.pnpm-store/
+*.tsbuildinfo
+
+# =========================
+# OS / Editor
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sln
+*.user
+
+# =========================
+# Logs / temp
+# =========================
+*.log
+logs/
+tmp/
+temp/
+.cache/
+backend/.cache/
+
+# =========================
+# Large local model caches
+# =========================
+backend/models/
+backend/models1/
+
+# NOTE:
+# Do NOT ignore frontend static assets such as:
+# frontend/public/images/
+# frontend/public/models/
+# because they are part of the app runtime.
