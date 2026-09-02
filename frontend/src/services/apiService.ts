@@ -54,3 +54,10 @@ export const sendFeedback = async (data: unknown) => {
   if (!response.ok) throw new Error('Failed to send feedback');
   return response.json();
 };
+
+export const getFrames = async () => {
+  const response = await fetch(`${API_BASE_URL}/frames`);
+  if (!response.ok) throw new Error('Failed to get frames');
+  const data = await response.json();
+  return data.frames;
+};

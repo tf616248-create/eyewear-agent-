@@ -42,23 +42,12 @@ def load_inventory() -> list:
         return json.load(f)
 
 def frame_to_text(frame: dict) -> str:
-    """ממיר מסגרת לטקסט לצורך Embedding בצורה מאובטחת מפני שדות חסרים"""
-    face_shapes = frame.get('face_shapes_match', [])
-    if isinstance(face_shapes, list):
-        face_shapes_str = ' '.join(face_shapes)
-    else:
-        face_shapes_str = str(face_shapes)
-
+    """ממיר את השדות התיאוריים הקיימים במלאי לטקסט לצורך Embedding."""
     return (
         f"shape: {frame.get('shape', '')} "
+        f"frame: {frame.get('frame', '')} "
         f"style: {frame.get('style', '')} "
-        f"color: {frame.get('color', '')} "
-        f"material: {frame.get('material', '')} "
-        f"size: {frame.get('size', '')} "
-        f"weight: {frame.get('weight', '')} "
-        f"suitable for face shapes: {face_shapes_str} "
-        f"description: {frame.get('description', '')} "
-        f"gender: {frame.get('gender', '')}"
+        f"description: {frame.get('description_he', frame.get('description', ''))}"
     )
 
 def session_to_text(session: dict) -> str:
@@ -126,8 +115,7 @@ def find_similar_frames(session: dict, top_k: int = 6) -> list[dict]:
     for item in index:
         frame = item['frame']
 
-        # מסנן מסגרות שאזלו או נדחו
-        if frame.get('stock', 0) == 0:
+        if frame.get('stock') == 0:
             continue
         if frame['id'] in excluded_ids:
             continue

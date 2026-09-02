@@ -13,7 +13,6 @@
     "@mediapipe/camera_utils": "^0.3.1675466862",
     "@mediapipe/drawing_utils": "^0.3.1675466124",
     "@mediapipe/face_mesh": "^0.4.1633559619",
-    "face-api.js": "^0.22.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "three": "^0.184.0"

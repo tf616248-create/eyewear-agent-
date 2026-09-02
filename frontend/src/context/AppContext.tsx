@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { type FaceData, type UserSession, type PreviousFrame } from '../types/face.types';
 import { type AgentState } from '../types/agent.types';
 import { type FrameWithReason } from './appContextTypes';
 import { AppContext } from './contextValue';
-import { mapRecommendationsById } from '../data/inventory';
+import { mapRecommendationsById, type InventoryFrame } from '../data/inventory';
+import { getFrames } from '../services/apiService';
 
 const defaultSession: UserSession = {
   faceData: null,
@@ -23,7 +24,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [agentState, setAgentState] = useState<AgentState>(defaultAgentState);
   const [recommendations, setRecommendationsState] = useState<FrameWithReason[]>([]);
   const [displayedFrameIds, setDisplayedFrameIds] = useState<string[]>([]);
+  const [catalog, setCatalog] = useState<InventoryFrame[]>([]);
   const [sessionId] = useState<string>(() => crypto.randomUUID()); // יוצר sessionId אחד קבוע לכל סשן
+
+  useEffect(() => {
+    getFrames()
+      .then(setCatalog)
+      .catch(error => console.error('טעינת קטלוג המסגרות מה-API נכשלה:', error));
+  }, []);
 
   const setFaceData = (data: FaceData) =>
     setSession(prev => ({ ...prev, faceData: data }));
@@ -39,7 +47,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const setRecommendations = (frames: FrameWithReason[]) => {
     setDisplayedFrameIds(prev => [...new Set([...prev, ...frames.map(frame => frame.id)])]);
-    setRecommendationsState(mapRecommendationsById(frames));
+    setRecommendationsState(mapRecommendationsById(frames, catalog));
   };
 
   const addMessage = (role: 'user' | 'agent', content: string) =>
