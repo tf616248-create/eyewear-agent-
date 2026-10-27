@@ -1,4 +1,6 @@
-const API_BASE_URL = 'http://localhost:8000/api';
+// בפיתוח מקומי פונה ל-backend על localhost; בפריסה (Render) מגדירים
+// VITE_API_BASE_URL בזמן הבנייה לכתובת ה-API שפורסמה.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api';
 
 export interface RecommendationRequestPayload {
   faceData: {

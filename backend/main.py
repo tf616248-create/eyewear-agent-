@@ -24,6 +24,11 @@ origins = [
     "http://127.0.0.1:5174",
 ]
 
+# בפריסה (למשל Render) מגדירים FRONTEND_ORIGIN לכתובת ה-frontend שפורסם,
+# כדי שהדפדפן יורשה לקרוא ל-API הזה. אפשר כמה כתובות מופרדות בפסיק.
+extra_origins = os.getenv("FRONTEND_ORIGIN", "")
+origins += [origin.strip() for origin in extra_origins.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

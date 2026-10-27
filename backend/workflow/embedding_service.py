@@ -4,15 +4,16 @@ from pathlib import Path
 import torch
 from transformers import AutoTokenizer, AutoModel
 
-# 1. טעינת המודל והטוקנייזר מהנתיב המקומי — פעם אחת בלבד בהפעלת השרת
-# הגדרת נתיב מוחלט ומדויק למיקום המודל על המחשב שלך
-MODEL_PATH = r"C:\Users\user1\FinalProject\eyewear-agent\backend\models\all-MiniLM-L6-v2\all-MiniLM-L6-v2"
+# 1. טעינת המודל והטוקנייזר — פעם אחת בלבד בהפעלת השרת.
+# מזהה המודל ב-Hugging Face Hub (ולא נתיב מקומי): כך הקוד עובד בכל סביבה
+# (כולל שרת בענן כמו Render), ו-transformers מוריד ושומר אותו במטמון מקומי
+# (~90MB) באופן אוטומטי בהפעלה הראשונה.
+MODEL_PATH = "sentence-transformers/all-MiniLM-L6-v2"
 
-print("🔄 טוען מודל אמבדינגס מהנתיב המקומי...")
-# שימוש בנתיב המוחלט ישירות
-tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
-model = AutoModel.from_pretrained(MODEL_PATH, local_files_only=True)
-print("✅ המודל נטען בהצלחה אופליין!")
+print("🔄 טוען מודל אמבדינגס...")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+model = AutoModel.from_pretrained(MODEL_PATH)
+print("✅ המודל נטען בהצלחה!")
 
 def get_embedding(text: str) -> np.ndarray:
     """פונקציית עזר להפקת Embedding מתוך הטקסט באמצעות המודל המקומי"""
@@ -34,8 +35,8 @@ def get_embedding(text: str) -> np.ndarray:
         embedding = embedding / norm
     return embedding
 
-# טעינת המלאי
-INVENTORY_PATH = r"C:\Users\user1\FinalProject\eyewear-agent\backend\data\eyewear_inventory.json"
+# טעינת המלאי — נתיב יחסי לקובץ הזה, כדי שיעבוד בכל מחשב/שרת
+INVENTORY_PATH = Path(__file__).resolve().parent.parent / "data" / "eyewear_inventory.json"
 
 def load_inventory() -> list:
     with open(INVENTORY_PATH, encoding='utf-8') as f:
