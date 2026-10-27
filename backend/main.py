@@ -1,7 +1,15 @@
 import os
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+
+# ב-Windows ה-console לרוב לא ב-UTF-8 כברירת מחדל, וההדפסות עם עברית/אימוג'ים
+# בקוד (workflow/*) קורסות על UnicodeEncodeError ומפילות את הבקשה עם 500.
+if sys.stdout.encoding != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+if sys.stderr.encoding != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # טעינת משתני סביבה
 load_dotenv()
