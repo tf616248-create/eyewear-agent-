@@ -12,14 +12,23 @@ export default function Welcome({ onNext }: WelcomeProps) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
   const startCamera = async () => {
+    setCameraError(null);
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
       setStream(mediaStream);
       setCameraActive(true);
     } catch (err) {
       console.error('שגיאה בגישה למצלמה:', err);
+      const message =
+        err instanceof DOMException && err.name === 'NotReadableError'
+          ? 'המצלמה תפוסה על ידי אפליקציה או טאב אחר. סגרי אותם ונסי שוב.'
+          : err instanceof DOMException && err.name === 'NotAllowedError'
+          ? 'הגישה למצלמה נחסמה. אפשרי גישה בהגדרות הדפדפן ונסי שוב.'
+          : 'לא הצלחנו לגשת למצלמה. נסי שוב.';
+      setCameraError(message);
     }
   };
 
@@ -29,6 +38,14 @@ export default function Welcome({ onNext }: WelcomeProps) {
       videoRef.current.play();
     }
   }, [stream, cameraActive]);
+
+  // Release the camera on unmount (and before the effect above re-runs)
+  // so a hot-reload or navigating away doesn't leave the device locked.
+  useEffect(() => {
+    return () => {
+      stream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [stream]);
 
   const handleScan = async () => {
     if (!videoRef.current) return;
@@ -96,6 +113,8 @@ export default function Welcome({ onNext }: WelcomeProps) {
       {!cameraActive && (
         <button className="button button--primary button--wide" onClick={startCamera}>התחל/י עכשיו <span>↗</span></button>
       )}
+
+      {cameraError && <p className="camera-error-note">{cameraError}</p>}
 
       {cameraActive && !scanning && (
         <button className="button button--primary button--wide" onClick={handleScan}>סרוק את הפנים שלי <span>✦</span></button>
