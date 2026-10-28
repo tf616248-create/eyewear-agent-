@@ -1,4 +1,5 @@
 import json
+import threading
 import numpy as np
 from pathlib import Path
 
@@ -14,29 +15,38 @@ MODEL_PATH = "sentence-transformers/all-MiniLM-L6-v2"
 _tokenizer = None
 _model = None
 
+_model_lock = threading.Lock()
+
 def _get_model():
     global _tokenizer, _model
     if _tokenizer is None:
-        # ה-import של transformers (ושל torch, בתוך get_embeddings_batch) קורה
-        # כאן ולא בראש הקובץ בכוונה: זו ספרייה כבדה, וה-import עצמו (לא רק
-        # הורדת המודל) לוקח זמן לא מבוטל על מעבד חלש/משותף כמו ב-Render. אם
-        # זה היה בראש הקובץ, הוא היה רץ עוד לפני ש-uvicorn מספיק לפתוח פורט,
-        # וגורם ל-"Port scan timeout" בדיוק כמו עם טעינת המודל עצמה.
-        from transformers import AutoTokenizer, AutoModel
-        print("🔄 טוען מודל אמבדינגס...")
-        try:
-            # אם המודל כבר במטמון המקומי (למשל כי scripts/warm_model_cache.py
-            # רץ בזמן ה-build), נטען אותו בלי לפנות לרשת בכלל - ה-from_pretrained
-            # הרגיל שולח כמה קריאות HEAD ל-Hugging Face Hub כדי לבדוק גרסה,
-            # וזה יכול לקחת הרבה זמן על רשת איטית/מוגבלת ולגרום ל-timeout.
-            _tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
-            _model = AutoModel.from_pretrained(MODEL_PATH, local_files_only=True)
-        except OSError:
-            # אין עדיין מטמון מקומי (למשל ריצה ראשונה על מחשב חדש) - מורידים.
-            _tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-            _model = AutoModel.from_pretrained(MODEL_PATH)
-        print("✅ המודל נטען בהצלחה!")
+        with _model_lock:
+            if _tokenizer is None:  # ייתכן שתהליך חימום ברקע כבר טען בזמן שהמתנו על הנעילה
+                # ה-import של transformers (ושל torch, בתוך get_embeddings_batch) קורה
+                # כאן ולא בראש הקובץ בכוונה: זו ספרייה כבדה, וה-import עצמו (לא רק
+                # הורדת המודל) לוקח זמן לא מבוטל על מעבד חלש/משותף כמו ב-Render. אם
+                # זה היה בראש הקובץ, הוא היה רץ עוד לפני ש-uvicorn מספיק לפתוח פורט,
+                # וגורם ל-"Port scan timeout" בדיוק כמו עם טעינת המודל עצמה.
+                from transformers import AutoTokenizer, AutoModel
+                print("🔄 טוען מודל אמבדינגס...")
+                try:
+                    # אם המודל כבר במטמון המקומי (למשל כי scripts/warm_model_cache.py
+                    # רץ בזמן ה-build), נטען אותו בלי לפנות לרשת בכלל - ה-from_pretrained
+                    # הרגיל שולח כמה קריאות HEAD ל-Hugging Face Hub כדי לבדוק גרסה,
+                    # וזה יכול לקחת הרבה זמן על רשת איטית/מוגבלת ולגרום ל-timeout.
+                    _tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
+                    _model = AutoModel.from_pretrained(MODEL_PATH, local_files_only=True)
+                except OSError:
+                    # אין עדיין מטמון מקומי (למשל ריצה ראשונה על מחשב חדש) - מורידים.
+                    _tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+                    _model = AutoModel.from_pretrained(MODEL_PATH)
+                print("✅ המודל נטען בהצלחה!")
     return _tokenizer, _model
+
+def warm_up():
+    """טוען את המודל ברקע, ברגע שהשרת עולה (ראו main.py) - כדי שה-import הכבד
+    של torch/transformers לא ייפול על הבקשה הראשונה של משתמש בפועל."""
+    _get_model()
 
 def get_embeddings_batch(texts: list[str]) -> list[np.ndarray]:
     """מפיק embeddings למספר טקסטים במכה אחת (batch) - קריאה בודדת למודל

@@ -52,3 +52,20 @@ app.include_router(frames_router, prefix="/api", tags=["frames"])
 @app.get("/")
 def read_root():
     return {"message": "Eyewear Agent Backend"}
+
+@app.on_event("startup")
+def warm_embedding_model_in_background():
+    """מתחיל לטעון את מודל ה-embedding ברקע כבר כשהשרת עולה, בלי לחכות
+    לבקשה הראשונה של משתמש. כך ה-import הכבד של torch/transformers לא
+    נופל על המשתמש הראשון שמגיע למסך ההמלצות (בפועל יש לו כמה שניות/דקה
+    של צילום פנים ומילוי שאלון עד שהוא מגיע לשם)."""
+    import threading
+    from workflow.embedding_service import warm_up
+
+    def _warm():
+        try:
+            warm_up()
+        except Exception as e:
+            print(f"⚠️ חימום המודל ברקע נכשל (ייטען שוב בבקשה הראשונה): {e}")
+
+    threading.Thread(target=_warm, daemon=True).start()
