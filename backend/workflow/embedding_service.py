@@ -10,13 +10,24 @@ from transformers import AutoTokenizer, AutoModel
 # (~90MB) באופן אוטומטי בהפעלה הראשונה.
 MODEL_PATH = "sentence-transformers/all-MiniLM-L6-v2"
 
-print("🔄 טוען מודל אמבדינגס...")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-model = AutoModel.from_pretrained(MODEL_PATH)
-print("✅ המודל נטען בהצלחה!")
+# טוענים את המודל רק בפעם הראשונה שבאמת צריך אותו (לא בזמן import), כדי
+# שהשרת יספיק לפתוח את הפורט מהר ולעבור את בדיקת ה-port scan של Render —
+# הורדת/טעינת המודל יכולה לקחת יותר מהטיימאאוט אם היא קורית לפני bind הפורט.
+_tokenizer = None
+_model = None
+
+def _get_model():
+    global _tokenizer, _model
+    if _tokenizer is None:
+        print("🔄 טוען מודל אמבדינגס...")
+        _tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+        _model = AutoModel.from_pretrained(MODEL_PATH)
+        print("✅ המודל נטען בהצלחה!")
+    return _tokenizer, _model
 
 def get_embedding(text: str) -> np.ndarray:
     """פונקציית עזר להפקת Embedding מתוך הטקסט באמצעות המודל המקומי"""
+    tokenizer, model = _get_model()
     inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True)
     with torch.no_grad():
         outputs = model(**inputs)
