@@ -57,7 +57,11 @@ async def get_recommendations(session: dict) -> list[dict]:
     print("🤖 Step 4: Calling Gemini...")
     
     # הגדרת משתני לולאת הניסיונות
-    max_retries = 3
+    # טיימאאוט מצומצם ופחות ניסיונות: דירוג המסגרות (Embedding) כבר עובד בלי
+    # Gemini, ש-Gemini מוסיף זה רק את הנימוק הטקסטואלי. אם הוא איטי/לא מגיב,
+    # מוטב להחזיר תוך זמן סביר עם נימוק גנרי מאשר "להיתלות" עד שהפרוקסי
+    # (לדוגמה ב-Render) מחליט שהבקשה תקועה ומחזיר 502 לדפדפן.
+    max_retries = 2
     attempt = 0
     success = False
     data = None
@@ -66,7 +70,7 @@ async def get_recommendations(session: dict) -> list[dict]:
     while attempt < max_retries and not success:
         try:
             import httpx
-            async with httpx.AsyncClient(timeout=90.0) as client:
+            async with httpx.AsyncClient(timeout=25.0) as client:
                 response = await client.post(
                     GEMINI_URL,
                     json={
@@ -96,9 +100,10 @@ async def get_recommendations(session: dict) -> list[dict]:
             if attempt < max_retries:
                 await asyncio.sleep(2)
             else:
-                # כשהגענו למכסה, נבצע את ה-raise כפי שביקשת
-                print("❌ כל הניסיונות נכשלו.")
-                raise last_exception
+                # לא מפילים את כל הבקשה אם Gemini לא עונה בזמן - ממשיכים
+                # לשלב הפענוח עם data=None, שיגרום לכל המסגרות לקבל את
+                # fallback_reason במקום לקרוס/להיתקע.
+                print(f"⚠️ כל הניסיונות ל-Gemini נכשלו ({last_exception}). ממשיכים עם נימוק גנרי.")
 
   
     # שלב 5 — פענוח בטוח של תשובת ה-JSON

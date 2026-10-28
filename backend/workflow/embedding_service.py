@@ -20,31 +20,45 @@ def _get_model():
     global _tokenizer, _model
     if _tokenizer is None:
         print("🔄 טוען מודל אמבדינגס...")
-        _tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-        _model = AutoModel.from_pretrained(MODEL_PATH)
+        try:
+            # אם המודל כבר במטמון המקומי (למשל כי scripts/warm_model_cache.py
+            # רץ בזמן ה-build), נטען אותו בלי לפנות לרשת בכלל - ה-from_pretrained
+            # הרגיל שולח כמה קריאות HEAD ל-Hugging Face Hub כדי לבדוק גרסה,
+            # וזה יכול לקחת הרבה זמן על רשת איטית/מוגבלת ולגרום ל-timeout.
+            _tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
+            _model = AutoModel.from_pretrained(MODEL_PATH, local_files_only=True)
+        except OSError:
+            # אין עדיין מטמון מקומי (למשל ריצה ראשונה על מחשב חדש) - מורידים.
+            _tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+            _model = AutoModel.from_pretrained(MODEL_PATH)
         print("✅ המודל נטען בהצלחה!")
     return _tokenizer, _model
 
-def get_embedding(text: str) -> np.ndarray:
-    """פונקציית עזר להפקת Embedding מתוך הטקסט באמצעות המודל המקומי"""
+def get_embeddings_batch(texts: list[str]) -> list[np.ndarray]:
+    """מפיק embeddings למספר טקסטים במכה אחת (batch) - קריאה בודדת למודל
+    במקום קריאה נפרדת לכל טקסט, מה שהופך בניית אינדקס של מאות מסגרות
+    להרבה יותר מהירה (חשוב כדי לא להיתקע על timeout בבקשה הראשונה בפריסה)."""
     tokenizer, model = _get_model()
-    inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True)
+    inputs = tokenizer(texts, return_tensors="pt", padding=True, truncation=True)
     with torch.no_grad():
         outputs = model(**inputs)
-    
-    # ביצוע Mean Pooling (ממוצע הוקטורים) לקבלת וקטור יחיד שמייצג את המשפט
+
+    # ביצוע Mean Pooling (ממוצע הוקטורים) לקבלת וקטור יחיד שמייצג כל משפט
     attention_mask = inputs['attention_mask']
     token_embeddings = outputs.last_hidden_state
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
     sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
-    embedding = (sum_embeddings / sum_mask).squeeze().numpy()
-    
-    # נרמול הווקטור (שקול ל-normalize_embeddings=True)
-    norm = np.linalg.norm(embedding)
-    if norm > 0:
-        embedding = embedding / norm
-    return embedding
+    embeddings = (sum_embeddings / sum_mask).numpy()
+
+    # נרמול כל הווקטורים (שקול ל-normalize_embeddings=True)
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    norms[norms == 0] = 1
+    return list(embeddings / norms)
+
+def get_embedding(text: str) -> np.ndarray:
+    """פונקציית עזר להפקת Embedding מתוך טקסט בודד"""
+    return get_embeddings_batch([text])[0]
 
 # טעינת המלאי — נתיב יחסי לקובץ הזה, כדי שיעבוד בכל מחשב/שרת
 INVENTORY_PATH = Path(__file__).resolve().parent.parent / "data" / "eyewear_inventory.json"
@@ -88,26 +102,42 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     """חישוב דמיון בין שני ווקטורים"""
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
+# קובץ embeddings מוכן מראש (ראו scripts/precompute_embeddings.py) - חוסך
+# את הצורך להריץ את המודל על כל הקטלוג בכל cold start של השרת.
+PRECOMPUTED_EMBEDDINGS_PATH = Path(__file__).resolve().parent.parent / "data" / "frame_embeddings.json"
+
+def _load_precomputed_embeddings() -> dict[str, np.ndarray]:
+    if not PRECOMPUTED_EMBEDDINGS_PATH.exists():
+        return {}
+    with open(PRECOMPUTED_EMBEDDINGS_PATH, encoding="utf-8") as f:
+        data = json.load(f)
+    return {frame_id: np.array(vec) for frame_id, vec in data.get("frames", {}).items()}
+
 # אינדקס הווקטורים — נבנה פעם אחת בהפעלת השרת
 _frame_embeddings: list[dict] | None = None
 
 def build_index() -> list[dict]:
-    """בונה את אינדקס הווקטורים לכל המסגרות"""
+    """בונה את אינדקס הווקטורים לכל המסגרות, מהקובץ המוכן מראש כשאפשר,
+    ומריץ את המודל רק על מסגרות שלא נמצאו בו (למשל מסגרת שנוספה לאחרונה)."""
     global _frame_embeddings
     if _frame_embeddings is not None:
         return _frame_embeddings
 
     inventory = load_inventory()
-    
-    _frame_embeddings = []
-    for frame in inventory:
-        text = frame_to_text(frame)
-        _frame_embeddings.append({
-            "frame": frame,
-            "embedding": get_embedding(text) # שימוש בפונקציה המקומית החדשה
-        })
+    precomputed = _load_precomputed_embeddings()
 
-    print(f"✅ Embedding index built: {len(_frame_embeddings)} frames")
+    missing = [frame for frame in inventory if frame["id"] not in precomputed]
+    if missing:
+        texts = [frame_to_text(frame) for frame in missing]
+        for frame, embedding in zip(missing, get_embeddings_batch(texts)):
+            precomputed[frame["id"]] = embedding
+
+    _frame_embeddings = [
+        {"frame": frame, "embedding": precomputed[frame["id"]]}
+        for frame in inventory
+    ]
+
+    print(f"✅ Embedding index built: {len(_frame_embeddings)} frames ({len(missing)} computed live)")
     return _frame_embeddings
 
 def find_similar_frames(session: dict, top_k: int = 6) -> list[dict]:
