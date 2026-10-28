@@ -1,8 +1,6 @@
 import json
 import numpy as np
 from pathlib import Path
-import torch
-from transformers import AutoTokenizer, AutoModel
 
 # 1. טעינת המודל והטוקנייזר — פעם אחת בלבד בהפעלת השרת.
 # מזהה המודל ב-Hugging Face Hub (ולא נתיב מקומי): כך הקוד עובד בכל סביבה
@@ -19,6 +17,12 @@ _model = None
 def _get_model():
     global _tokenizer, _model
     if _tokenizer is None:
+        # ה-import של transformers (ושל torch, בתוך get_embeddings_batch) קורה
+        # כאן ולא בראש הקובץ בכוונה: זו ספרייה כבדה, וה-import עצמו (לא רק
+        # הורדת המודל) לוקח זמן לא מבוטל על מעבד חלש/משותף כמו ב-Render. אם
+        # זה היה בראש הקובץ, הוא היה רץ עוד לפני ש-uvicorn מספיק לפתוח פורט,
+        # וגורם ל-"Port scan timeout" בדיוק כמו עם טעינת המודל עצמה.
+        from transformers import AutoTokenizer, AutoModel
         print("🔄 טוען מודל אמבדינגס...")
         try:
             # אם המודל כבר במטמון המקומי (למשל כי scripts/warm_model_cache.py
@@ -38,6 +42,7 @@ def get_embeddings_batch(texts: list[str]) -> list[np.ndarray]:
     """מפיק embeddings למספר טקסטים במכה אחת (batch) - קריאה בודדת למודל
     במקום קריאה נפרדת לכל טקסט, מה שהופך בניית אינדקס של מאות מסגרות
     להרבה יותר מהירה (חשוב כדי לא להיתקע על timeout בבקשה הראשונה בפריסה)."""
+    import torch
     tokenizer, model = _get_model()
     inputs = tokenizer(texts, return_tensors="pt", padding=True, truncation=True)
     with torch.no_grad():
